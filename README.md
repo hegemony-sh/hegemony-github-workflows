@@ -37,17 +37,30 @@ jobs:
   release:
     name: Release
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    uses: hegemony-sh/hegemony-workflows/.github/workflows/plugin-release.yml@main
+    uses: hegemony-sh/hegemony-workflows/.github/workflows/plugin-release.yml@<commit-sha> # main
     permissions:
       contents: write
       id-token: write
       attestations: write
+      artifact-metadata: write
     secrets:
       RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 ```
 
 The job's check runs show up as `Release / Semantic Release` and, on public
 repositories that released something, `Release / Attest Release Assets`.
+
+### Pinning
+
+Callers reference this workflow by a full commit SHA, never by branch: the
+called code receives `RELEASE_TOKEN` and the release job's write permission,
+so what runs must be exactly what was reviewed. The trailing `# main` comment
+says which branch the pin was taken from. To pick up a change merged here,
+bump the SHA in the caller's `release.yml` in a reviewed pull request (the
+`git ls-remote https://github.com/hegemony-sh/hegemony-workflows main` line
+gives the current head). The release toolchain in `release-tools/` is
+checked out at that same SHA, so a pin bump moves the workflow and its
+dependency lockfile together.
 
 ### Inputs
 
@@ -61,7 +74,7 @@ repositories that released something, `Release / Attest Release Assets`.
 
 | Secret | Required | Purpose |
 |---|---|---|
-| `RELEASE_TOKEN` | yes | PAT (or GitHub App token) with `contents: read+write` on the caller, whose owner is a bypass actor of the caller's `main` ruleset. semantic-release pushes the release commit and tag with it and creates the GitHub Release with it. The built-in `GITHUB_TOKEN` cannot bypass rulesets, even with `contents: write`, and a release commit pushed with it would not trigger other workflows. |
+| `RELEASE_TOKEN` | yes | PAT (or GitHub App token) with `contents: read+write` on the caller and `contents: read` on this repository, whose owner is a bypass actor of the caller's `main` ruleset. The workflow fetches `release-tools/` from here with it, and semantic-release pushes the release commit and tag with it and creates the GitHub Release with it. The built-in `GITHUB_TOKEN` cannot bypass rulesets, even with `contents: write`, and a release commit pushed with it would not trigger other workflows. |
 
 The workflow fails fast, with a message that says what to add, when the
 secret arrives empty.
@@ -69,9 +82,10 @@ secret arrives empty.
 ### Permissions
 
 The workflow declares `permissions: {}` and each job asks for what it needs:
-`contents: write` for the release job, `id-token: write` plus
-`attestations: write` for the attest job only. A called workflow can only
-narrow what its caller grants, so the caller's `uses:` job must grant the
+`contents: write` for the release job; `id-token: write`,
+`attestations: write` and `artifact-metadata: write` (the storage record
+`actions/attest` v4 creates) for the attest job only. A called workflow can
+only narrow what its caller grants, so the caller's `uses:` job must grant the
 union shown above.
 
 ### What the caller must contain
@@ -86,16 +100,20 @@ union shown above.
 | `uv.lock` | Refreshed by `uv lock` inside the release and committed with the bump. |
 | `CHANGELOG.md` | Prepended on every release by `@semantic-release/changelog`. |
 
-The steps the workflow runs before `npx semantic-release` are: checkout with
-full history and no persisted credentials, `origin` re-pointed at an
-`x-access-token` URL built from `RELEASE_TOKEN`, Python, uv,
-`uv sync --frozen --all-packages`, Node.js, and the pinned semantic-release
-packages (`semantic-release@24`, `commit-analyzer@13`,
-`release-notes-generator@14`, `changelog@6`, `exec@6`, `git@10`,
-`github@11`) plus the `conventional-changelog-conventionalcommits@8` preset,
-which is what makes a bare `feat!:` / `fix!:` count as a breaking change (the
-default angular preset does not parse the marker). A `.releaserc.json` may
-only name plugins and presets from that list.
+The steps the workflow runs before semantic-release are, in order: checkout
+of the caller with full history and no persisted credentials; Python, uv and
+`uv sync --frozen --all-packages`; Node.js; a sparse checkout of this
+repository's `release-tools/` at the workflow's own commit; `npm ci
+--ignore-scripts` in it, which installs exactly `package-lock.json` (the
+semantic-release core, the `commit-analyzer`, `release-notes-generator`,
+`changelog`, `exec`, `git` and `github` plugins, and the
+`conventional-changelog-conventionalcommits` preset, which is what makes a
+bare `feat!:` / `fix!:` count as a breaking change; the default angular preset
+does not parse the marker); and only then `origin` re-pointed at an
+`x-access-token` URL built from `RELEASE_TOKEN`. Nothing installed can read
+the token: it is written after every install, and package lifecycle scripts
+never run. A `.releaserc.json` may only name plugins and presets from that
+lockfile.
 
 The plugin repositories' `.releaserc.json` chain, in `prepareCmd`:
 `set_version.py` → `uv lock` → `verify_release_version.py` → `build_wheels.py`
@@ -112,6 +130,29 @@ the assets from the run and attests `dist/*.whl` and `dist/SHA256SUMS` with
 `actions/attest`. Private repositories cannot attest, so the job is skipped
 there and switches itself on the moment the repository goes public. Verify
 with `gh attestation verify --repo hegemony-sh/<repo> <wheel>`.
+
+### Recovering a tag without a Release
+
+semantic-release pushes the release commit and the `vX.Y.Z` tag before it
+publishes the GitHub Release. If publication fails after that push (an API
+outage, a bad token), the tag exists and the Release does not, and a re-run
+will not repair it: semantic-release reads the tag as the last release and
+finds nothing new. The fix is to publish that tag's assets by hand, from a
+checkout of the tag:
+
+```bash
+git fetch --tags origin && git checkout vX.Y.Z
+uv sync --frozen --all-packages
+uv run --no-sync python scripts/build_wheels.py && (cd dist && sha256sum *.whl > SHA256SUMS)
+gh release create vX.Y.Z --verify-tag --title vX.Y.Z \
+  --notes "$(awk '/^## /{n++} n==1' CHANGELOG.md)" dist/*.whl dist/SHA256SUMS
+```
+
+`--verify-tag` refuses to create a tag that is not already on the remote, so
+the command cannot mint a version by accident; the notes are the newest
+`CHANGELOG.md` section, which the failed run already committed. The
+`verifyReleaseCmd` immutability guard in the callers' `.releaserc.json` keeps
+the next automatic run from touching that version again.
 
 ### Concurrency
 
