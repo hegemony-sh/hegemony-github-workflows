@@ -1,0 +1,31 @@
+# SPDX-FileCopyrightText: 2025-2026 Jakub Trávník <jakub.travnik@gmail.com>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The release toolchain lockfile and the action pins in this repository are
+# the only dependencies here. A bump lands as a reviewed PR; the callers pick
+# it up when they move their plugin-release.yml pin.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /release-tools
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      semantic-release:
+        patterns:
+          - "*"
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "05:00"
+      timezone: Etc/UTC
+    commit-message:
+      prefix: "chore(deps)"
