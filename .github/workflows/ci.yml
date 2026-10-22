@@ -116,8 +116,11 @@ jobs:
   # plugin-release.yml installs release-tools/package-lock.json with exactly
   # this command in every caller's release. Dependabot's lockfile bumps land
   # here first, so a lockfile that no longer installs fails the pull request
-  # and not a plugin release. Node 22 is the oldest line the packages in the
-  # lockfile accept (their `engines` fields).
+  # and not a plugin release. It runs on the Node version plugin-release.yml
+  # defaults to, read from that file, so a bump that raises a package's Node
+  # minimum past the default fails here: --engine-strict fails the install
+  # when a package's `engines` field no longer accepts that Node, and the next
+  # step proves semantic-release itself starts on it.
   release-tools:
     name: Release Toolchain Installs
     runs-on: ubuntu-latest
@@ -127,11 +130,26 @@ jobs:
         with:
           persist-credentials: false
 
+      # yq (mikefarah's, v4) is preinstalled on GitHub's Ubuntu runners.
+      - name: Read the release workflow's Node.js default
+        id: node
+        run: |
+          version=$(yq '.on.workflow_call.inputs.node-version.default' .github/workflows/plugin-release.yml)
+          if [ -z "$version" ] || [ "$version" = null ]; then
+            echo "::error file=.github/workflows/plugin-release.yml::no default for the node-version input"
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: "22"
+          node-version: ${{ steps.node.outputs.version }}
 
       - name: Install the lockfile
         working-directory: release-tools
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --engine-strict --no-audit --no-fund
+
+      - name: Start semantic-release
+        working-directory: release-tools
+        run: npx --no-install semantic-release --version

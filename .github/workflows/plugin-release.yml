@@ -29,10 +29,13 @@ on:
         required: false
         default: "0.9.28"
       node-version:
-        description: Node.js version that runs semantic-release.
+        description: >-
+          Node.js version that runs semantic-release. The release-tools
+          lockfile needs 22.22.2 or later on the 22 line, or 24.15 or later;
+          the install step fails on anything older.
         type: string
         required: false
-        default: "20"
+        default: "24"
     secrets:
       RELEASE_TOKEN:
         description: >-
@@ -129,14 +132,16 @@ jobs:
           persist-credentials: false
 
       # `npm ci` installs exactly the lockfile or fails; --ignore-scripts keeps
-      # package lifecycle scripts from running at all. This step runs before
-      # any credential is written to the workspace, so nothing it installs can
-      # read one. The conventionalcommits preset is not a plugin but the parser
-      # the callers' .releaserc.json names: the default angular preset does not
-      # parse the `!` breaking marker, so a bare `feat!:` would release nothing.
+      # package lifecycle scripts from running at all, and --engine-strict
+      # fails the install when node-version is older than a package accepts.
+      # This step runs before any credential is written to the workspace, so
+      # nothing it installs can read one. The conventionalcommits preset is
+      # not a plugin but the parser the callers' .releaserc.json names: the
+      # default angular preset does not parse the `!` breaking marker, so a
+      # bare `feat!:` would release nothing.
       - name: Install semantic-release
         working-directory: .hegemony-release-tools/release-tools
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --engine-strict --no-audit --no-fund
 
       # Last step before semantic-release runs, and the first that puts the
       # token anywhere on disk: everything installed above is already in place.

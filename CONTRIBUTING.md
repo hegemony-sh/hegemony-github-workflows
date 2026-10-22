@@ -59,14 +59,14 @@ they are reviewed like any other change.
 
 ## Local setup and checks
 
-You need [uv](https://docs.astral.sh/uv/), Node.js with npm (CI uses 22) and
+You need [uv](https://docs.astral.sh/uv/), Node.js with npm (CI uses 24) and
 [pre-commit](https://pre-commit.com/). CI runs these, and a pull request needs
 them green:
 
 ```bash
 uvx reuse@6.2.0 lint
 uvx zizmor@1.22.0 --offline .github/workflows
-(cd release-tools && npm ci --ignore-scripts --no-audit --no-fund)
+(cd release-tools && npm ci --ignore-scripts --engine-strict --no-audit --no-fund)
 ```
 
 `pre-commit install` installs the hooks: REUSE, zizmor, the secret scan

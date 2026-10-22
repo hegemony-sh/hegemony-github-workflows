@@ -67,7 +67,7 @@ dependency lockfile together.
 |---|---|---|
 | `python-version` | `"3.12"` | Handed to `actions/setup-python`. |
 | `uv-version` | `"0.9.28"` | Handed to `astral-sh/setup-uv`. Keep it equal to the caller's `ci.yml` pin so the release refreshes `uv.lock` with the resolver CI validated. |
-| `node-version` | `"20"` | Runs semantic-release. |
+| `node-version` | `"24"` | Runs semantic-release. The `release-tools` lockfile needs 22.22.2 or later on the 22 line, or 24.15 or later. |
 
 ### Secrets
 
