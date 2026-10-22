@@ -28,10 +28,14 @@ The source is licensed under `AGPL-3.0-or-later`. Your contribution is licensed
 under the same terms, and contributing it transfers no copyright to the
 project. There is no Contributor License Agreement.
 
-The project's own files name Rexonix s.r.o. as the copyright holder and Jakub
-Trávník as the author. If you do not write on behalf of Rexonix s.r.o., you
-keep the copyright in your contribution and may add your own
-`SPDX-FileCopyrightText` line to the files you change, as REUSE recommends.
+Each first-party file that carries an SPDX header names Rexonix s.r.o. as the
+copyright holder in `SPDX-FileCopyrightText` and Jakub Trávník as the author
+in `SPDX-FileContributor`. The files that stay without a header
+(`release-tools/package.json`, `release-tools/package-lock.json` and
+`release-tools/.gitignore`) are annotated in `REUSE.toml`, which names the
+holder only. If you do not write on behalf of Rexonix s.r.o., you keep the
+copyright in your contribution and may add your own `SPDX-FileCopyrightText`
+line to the files you change, as REUSE recommends.
 
 Every commit must be signed off under the
 [Developer Certificate of Origin](https://developercertificate.org/) (DCO),
@@ -81,9 +85,9 @@ uvx zizmor@1.22.0 --offline .github/workflows
 the pull request, and scans the commits it adds for secrets.
 
 Every new file carries an SPDX header, as the existing ones do, so that
-`reuse lint` passes. A first-party file names the copyright holder, Rexonix
-s.r.o., in `SPDX-FileCopyrightText` and, directly after it, the author in
-`SPDX-FileContributor`. In YAML and other files with `#` comments:
+`reuse lint` passes. A first-party file's header names the copyright holder,
+Rexonix s.r.o., in `SPDX-FileCopyrightText` and, directly after it, the author
+in `SPDX-FileContributor`. In YAML and other files with `#` comments:
 
 <!-- REUSE-IgnoreStart -->
 
@@ -108,7 +112,8 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 <!-- REUSE-IgnoreEnd -->
 
-A file that cannot carry a header gets an entry in `REUSE.toml`. Markdown
+A file that cannot carry a header gets an entry in `REUSE.toml`, which names
+the holder only: reuse 6.2.0 ignores `SPDX-FileContributor` there. Markdown
 follows the rules in `.markdownlint-cli2.jsonc`
 (`npx markdownlint-cli2 '*.md'`); CI does not run that check.
 
