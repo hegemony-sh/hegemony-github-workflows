@@ -1,0 +1,16 @@
+version = 1
+SPDX-PackageName = "hegemony-workflows"
+SPDX-PackageSupplier = "Jakub Travnik <jakub.travnik@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/hegemony-sh/hegemony-workflows"
+
+# Files that stay without a header: package.json (JSON has no comment syntax),
+# package-lock.json (npm generates and rewrites it) and release-tools/.gitignore.
+[[annotations]]
+path = [
+    "release-tools/package.json",
+    "release-tools/package-lock.json",
+    "release-tools/.gitignore",
+]
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2025-2026 Jakub Travnik <jakub.travnik@gmail.com>"
+SPDX-License-Identifier = "AGPL-3.0-or-later"
