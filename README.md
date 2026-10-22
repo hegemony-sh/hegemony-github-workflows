@@ -56,7 +56,7 @@ so what runs must be exactly what was reviewed. The trailing `# main` comment
 says which branch the pin was taken from. A change merged here changes no
 caller: it reaches one only when that caller bumps the SHA in its `release.yml`,
 in a pull request reviewed there (the
-`git ls-remote https://github.com/hegemony-sh/hegemony-workflows main` line
+`git ls-remote https://github.com/hegemony-sh/hegemony-github-workflows main` line
 gives the current head). The release toolchain in `release-tools/` is
 checked out at that same SHA, so a pin bump moves the workflow and its
 dependency lockfile together.
