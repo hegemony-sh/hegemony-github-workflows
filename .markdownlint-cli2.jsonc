@@ -1,0 +1,20 @@
+/*
+ * SPDX-FileCopyrightText: 2025-2026 Jakub Trávník <jakub.travnik@gmail.com>
+ *
+ * SPDX-License-Identifier: AGPL-3.0-or-later
+ */
+
+{
+  // Configuration for markdownlint-cli2
+  // See: https://github.com/DavidAnson/markdownlint-cli2
+
+  // Ignore patterns - release-tools/node_modules holds the toolchain's
+  // packages once `npm ci` has run
+  "ignores": ["**/node_modules/**"],
+
+  // Extend base markdownlint config
+  "config": {
+    // Extend from .markdownlint.jsonc in the same directory
+    "extends": ".markdownlint.jsonc",
+  },
+}

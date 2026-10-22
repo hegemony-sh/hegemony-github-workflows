@@ -1,0 +1,49 @@
+# SPDX-FileCopyrightText: 2025-2026 Jakub Trávník <jakub.travnik@gmail.com>
+#
+# SPDX-License-Identifier: AGPL-3.0-or-later
+
+# The checks CI runs, locally, at the same versions (see .github/workflows/ci.yml).
+default_install_hook_types: [pre-commit, commit-msg]
+
+repos:
+  # Typo checker (fast, Rust-based)
+  - repo: https://github.com/crate-ci/typos
+    rev: v1.42.1
+    hooks:
+      - id: typos
+        name: "Checks: typo scan"
+
+  # GitHub Actions security scanner. The workflows only and offline, as in CI:
+  # the online audits need a GitHub token and network access to every action's
+  # repository.
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: v1.22.0
+    hooks:
+      - id: zizmor
+        name: "Security: GitHub Actions policy scan (Zizmor)"
+        args: ["--offline"]
+        files: ^\.github/workflows/.+\.ya?ml$
+
+  # REUSE 3.3 (SPDX) compliance
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: v6.2.0
+    hooks:
+      - id: reuse
+        name: "Licensing: REUSE 3.3 SPDX compliance"
+
+  # Secrets detection
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+        name: "Security: secrets scan (gitleaks)"
+
+  # Conventional Commits lint
+  - repo: https://github.com/alessandrojcm/commitlint-pre-commit-hook
+    rev: v9.22.0
+    hooks:
+      - id: commitlint
+        name: "Checks: commit message (commitlint)"
+        stages: [commit-msg]
+        additional_dependencies:
+          - "@commitlint/config-conventional@19"
