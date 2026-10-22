@@ -24,6 +24,10 @@ compromise.
 
 ## Licensing and DCO
 
+The [Code of Conduct](CODE_OF_CONDUCT.md) is adapted third-party documentation
+under CC-BY-4.0; preserve its attribution and license when editing it. The
+source-code licensing and contribution rules below continue to apply to code.
+
 The source is licensed under `AGPL-3.0-or-later`. Your contribution is licensed
 under the same terms, and contributing it transfers no copyright to the
 project. There is no Contributor License Agreement.
