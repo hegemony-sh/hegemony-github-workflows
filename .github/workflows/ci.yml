@@ -122,7 +122,7 @@ jobs:
   # when a package's `engines` field no longer accepts that Node, and the next
   # step proves semantic-release itself starts on it.
   release-tools:
-    name: Release Toolchain Installs
+    name: Release Toolchain
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -153,3 +153,38 @@ jobs:
       - name: Start semantic-release
         working-directory: release-tools
         run: npx --no-install semantic-release --version
+
+      # Packages that install can still fail together: preset 10 of
+      # conventional-changelog-conventionalcommits needs a changelog writer the
+      # notes generator does not load, and only a release found out. So this
+      # dry-runs one in a throwaway repository, with the analyzer and notes
+      # settings the callers' .releaserc.json use, and checks the version and
+      # the breaking-change notes. env -i keeps the runner's variables out, so
+      # semantic-release reads the branch from git and sees no token.
+      - name: Dry-run a release
+        shell: bash
+        run: |
+          tools="$GITHUB_WORKSPACE/release-tools"
+          repo="$RUNNER_TEMP/dry-run"
+          git init -q -b main "$repo"
+          git init -q --bare -b main "$repo.git"
+          cd "$repo"
+          git config user.name ci
+          git config user.email ci@example.invalid
+          git commit -q --allow-empty -m "feat: first"
+          git tag v0.1.0
+          git commit -q --allow-empty -m "fix!: drop an old flag"
+          git push -q "$repo.git" main v0.1.0
+          cat > .releaserc.json <<'JSON'
+          {
+            "branches": ["main"],
+            "plugins": [
+              ["@semantic-release/commit-analyzer", {"preset": "conventionalcommits", "releaseRules": [{"breaking": true, "release": "minor"}]}],
+              ["@semantic-release/release-notes-generator", {"preset": "conventionalcommits"}]
+            ]
+          }
+          JSON
+          env -i PATH="$PATH" HOME="$HOME" "$tools/node_modules/.bin/semantic-release" \
+            --dry-run --no-ci --repository-url "file://$repo.git" | tee "$RUNNER_TEMP/dry-run.log"
+          grep -q 'The next release version is 0.2.0' "$RUNNER_TEMP/dry-run.log"
+          grep -q 'BREAKING CHANGES' "$RUNNER_TEMP/dry-run.log"

@@ -163,8 +163,11 @@ or cancelling it.
 
 CI runs on every pull request and every push to `main`: a Conventional Commits
 lint of the pull request's commits, a secret scan (gitleaks) and a workflow
-scan (zizmor), REUSE licence lint, and an `npm ci --ignore-scripts` of
-`release-tools/` that fails when the lockfile no longer installs.
+scan (zizmor), REUSE licence lint, and a release toolchain check. That check
+installs `release-tools/` with `npm ci --ignore-scripts --engine-strict` on the
+`node-version` default, then dry-runs a release in a throwaway repository, so a
+lockfile that no longer installs, no longer runs on that Node.js, or no longer
+renders release notes fails the pull request rather than a plugin release.
 [CONTRIBUTING.md](CONTRIBUTING.md) shows how to run them locally, and
 [SECURITY.md](SECURITY.md) how to report a vulnerability.
 
