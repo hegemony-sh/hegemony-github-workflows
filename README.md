@@ -6,9 +6,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 # hegemony-workflows
 
-Reusable GitHub Actions workflows shared by the Hegemony repositories. The
-repository's Actions access is set to "accessible from repositories in the
-organization", which is what lets a private caller use a workflow from here.
+Reusable GitHub Actions workflows shared by the Hegemony repositories.
 
 ## `plugin-release.yml` — release a plugin repository on merge to `main`
 
@@ -55,8 +53,9 @@ repositories that released something, `Release / Attest Release Assets`.
 Callers reference this workflow by a full commit SHA, never by branch: the
 called code receives `RELEASE_TOKEN` and the release job's write permission,
 so what runs must be exactly what was reviewed. The trailing `# main` comment
-says which branch the pin was taken from. To pick up a change merged here,
-bump the SHA in the caller's `release.yml` in a reviewed pull request (the
+says which branch the pin was taken from. A change merged here changes no
+caller: it reaches one only when that caller bumps the SHA in its `release.yml`,
+in a pull request reviewed there (the
 `git ls-remote https://github.com/hegemony-sh/hegemony-workflows main` line
 gives the current head). The release toolchain in `release-tools/` is
 checked out at that same SHA, so a pin bump moves the workflow and its
@@ -125,10 +124,10 @@ the next tag already exists, so a release is never overwritten. Their
 
 ### Provenance
 
-When a release happened and the repository is public, a second job downloads
-the assets from the run and attests `dist/*.whl` and `dist/SHA256SUMS` with
-`actions/attest`. Private repositories cannot attest, so the job is skipped
-there and switches itself on the moment the repository goes public. Verify
+When a release happened and the calling repository is public, a second job
+downloads the assets from the run and attests `dist/*.whl` and
+`dist/SHA256SUMS` with `actions/attest`. Private repositories cannot attest, so
+the job is skipped there and runs by itself once the caller is public. Verify
 with `gh attestation verify --repo hegemony-sh/<repo> <wheel>`.
 
 ### Recovering a tag without a Release
@@ -159,3 +158,18 @@ the next automatic run from touching that version again.
 `concurrency: release-${{ github.repository }}` with `cancel-in-progress:
 false`: a second merge queues behind a running release rather than racing it
 or cancelling it.
+
+## Checks
+
+CI runs on every pull request and every push to `main`: a Conventional Commits
+lint of the pull request's commits, a secret scan (gitleaks) and a workflow
+scan (zizmor), REUSE licence lint, and an `npm ci --ignore-scripts` of
+`release-tools/` that fails when the lockfile no longer installs.
+[CONTRIBUTING.md](CONTRIBUTING.md) shows how to run them locally, and
+[SECURITY.md](SECURITY.md) how to report a vulnerability.
+
+## Licence
+
+`AGPL-3.0-or-later`; see [LICENSE](LICENSE). The repository follows the
+[REUSE](https://reuse.software/) specification: each file carries an SPDX
+header, or an entry in `REUSE.toml` where it cannot.

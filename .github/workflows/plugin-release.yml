@@ -113,8 +113,10 @@ jobs:
       # file, so the whole dependency graph is the reviewed one and not
       # whatever the registry resolves on the day. Only that directory is
       # checked out, next to the caller's tree, with nothing persisted: the
-      # token is used for the fetch and nowhere else. RELEASE_TOKEN can read
-      # this repository because it is an organization-wide token.
+      # token is used for the fetch and nowhere else. The tooling is fetched
+      # from this repository, at the workflow's own commit
+      # (job.workflow_repository and job.workflow_sha), with RELEASE_TOKEN,
+      # which works whether this repository is private or public.
       - name: Check out the release tooling
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
         with:
@@ -181,13 +183,12 @@ jobs:
     name: Attest Release Assets
     needs: release
     # Artifact attestations need a public repository or an Enterprise plan, so
-    # they are unavailable while the repos are private pre-launch — an ungated
-    # job fails the whole release run. This gate tests visibility only, so
-    # attestation switches back on by itself the moment the repository goes
-    # public and there is nothing to revert at launch; an Enterprise plan taken
-    # while still private would need the condition relaxed by hand. Both
-    # visibility sources are consulted so that one of them being absent for a
-    # given trigger cannot leave attestation silently off after launch.
+    # the job runs only when the caller is public; an ungated job would fail
+    # the whole release run of a private caller. The gate tests visibility
+    # only: an Enterprise plan on a private caller would need the condition
+    # relaxed by hand. Both visibility sources are consulted so that one of
+    # them being absent for a given trigger cannot switch attestation off
+    # silently.
     if: >-
       needs.release.outputs.released == 'true'
       && (github.repository_visibility == 'public'
