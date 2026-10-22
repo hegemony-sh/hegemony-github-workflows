@@ -29,10 +29,13 @@ on:
         required: false
         default: "0.9.28"
       node-version:
-        description: Node.js version that runs semantic-release.
+        description: >-
+          Node.js version that runs semantic-release. The release-tools
+          lockfile needs 22.22.2 or later on the 22 line, or 24.15 or later;
+          the install step fails on anything older.
         type: string
         required: false
-        default: "20"
+        default: "24"
     secrets:
       RELEASE_TOKEN:
         description: >-
@@ -84,18 +87,18 @@ jobs:
 
       # Full history: semantic-release finds the last release from the tags
       # reachable from main, and a shallow clone has none of them.
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Set up Python
-        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v6
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ inputs.python-version }}
 
       - name: Install uv
-        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v7
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: ${{ inputs.uv-version }}
           enable-cache: false
@@ -104,7 +107,7 @@ jobs:
         run: uv sync --frozen --all-packages
 
       - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v6
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ inputs.node-version }}
 
@@ -113,10 +116,12 @@ jobs:
       # file, so the whole dependency graph is the reviewed one and not
       # whatever the registry resolves on the day. Only that directory is
       # checked out, next to the caller's tree, with nothing persisted: the
-      # token is used for the fetch and nowhere else. RELEASE_TOKEN can read
-      # this repository because it is an organization-wide token.
+      # token is used for the fetch and nowhere else. The tooling is fetched
+      # from this repository, at the workflow's own commit
+      # (job.workflow_repository and job.workflow_sha), with RELEASE_TOKEN,
+      # which works whether this repository is private or public.
       - name: Check out the release tooling
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: ${{ job.workflow_repository }}
           ref: ${{ job.workflow_sha }}
@@ -127,14 +132,16 @@ jobs:
           persist-credentials: false
 
       # `npm ci` installs exactly the lockfile or fails; --ignore-scripts keeps
-      # package lifecycle scripts from running at all. This step runs before
-      # any credential is written to the workspace, so nothing it installs can
-      # read one. The conventionalcommits preset is not a plugin but the parser
-      # the callers' .releaserc.json names: the default angular preset does not
-      # parse the `!` breaking marker, so a bare `feat!:` would release nothing.
+      # package lifecycle scripts from running at all, and --engine-strict
+      # fails the install when node-version is older than a package accepts.
+      # This step runs before any credential is written to the workspace, so
+      # nothing it installs can read one. The conventionalcommits preset is
+      # not a plugin but the parser the callers' .releaserc.json names: the
+      # default angular preset does not parse the `!` breaking marker, so a
+      # bare `feat!:` would release nothing.
       - name: Install semantic-release
         working-directory: .hegemony-release-tools/release-tools
-        run: npm ci --ignore-scripts --no-audit --no-fund
+        run: npm ci --ignore-scripts --engine-strict --no-audit --no-fund
 
       # Last step before semantic-release runs, and the first that puts the
       # token anywhere on disk: everything installed above is already in place.
@@ -181,13 +188,12 @@ jobs:
     name: Attest Release Assets
     needs: release
     # Artifact attestations need a public repository or an Enterprise plan, so
-    # they are unavailable while the repos are private pre-launch — an ungated
-    # job fails the whole release run. This gate tests visibility only, so
-    # attestation switches back on by itself the moment the repository goes
-    # public and there is nothing to revert at launch; an Enterprise plan taken
-    # while still private would need the condition relaxed by hand. Both
-    # visibility sources are consulted so that one of them being absent for a
-    # given trigger cannot leave attestation silently off after launch.
+    # the job runs only when the caller is public; an ungated job would fail
+    # the whole release run of a private caller. The gate tests visibility
+    # only: an Enterprise plan on a private caller would need the condition
+    # relaxed by hand. Both visibility sources are consulted so that one of
+    # them being absent for a given trigger cannot switch attestation off
+    # silently.
     if: >-
       needs.release.outputs.released == 'true'
       && (github.repository_visibility == 'public'
