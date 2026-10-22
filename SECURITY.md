@@ -49,7 +49,7 @@ These targets may vary based on severity, complexity, affected dependencies, mai
 4. Disclosure timing is coordinated with the reporter when possible.
 5. Public details are published after a fix or mitigation is available, or after the coordinated disclosure window expires.
 
-Each vulnerability is published as an advisory on this repository's [Security tab](https://github.com/hegemony-sh/hegemony-workflows/security/advisories), with the affected commits and the commit that fixes it, which the callers then pin.
+Each vulnerability is published as an advisory on this repository's [Security tab](https://github.com/hegemony-sh/hegemony-github-workflows/security/advisories), with the affected commits and the commit that fixes it, which the callers then pin.
 
 ## Safe harbor
 
