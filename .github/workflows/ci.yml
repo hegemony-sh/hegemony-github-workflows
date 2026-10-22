@@ -119,8 +119,8 @@ jobs:
   # and not a plugin release. It runs on the Node version plugin-release.yml
   # defaults to, read from that file, so a bump that raises a package's Node
   # minimum past the default fails here: --engine-strict fails the install
-  # when a package's `engines` field no longer accepts that Node, and the next
-  # step proves semantic-release itself starts on it.
+  # when a package's `engines` field no longer accepts that Node, and the dry
+  # run below proves semantic-release loads and runs on it.
   release-tools:
     name: Release Toolchain
     runs-on: ubuntu-latest
@@ -150,17 +150,13 @@ jobs:
         working-directory: release-tools
         run: npm ci --ignore-scripts --engine-strict --no-audit --no-fund
 
-      - name: Start semantic-release
-        working-directory: release-tools
-        run: npx --no-install semantic-release --version
-
       # Packages that install can still fail together: preset 10 of
       # conventional-changelog-conventionalcommits needs a changelog writer the
-      # notes generator does not load, and only a release found out. So this
-      # dry-runs one in a throwaway repository, with the analyzer and notes
-      # settings the callers' .releaserc.json use, and checks the version and
-      # the breaking-change notes. env -i keeps the runner's variables out, so
-      # semantic-release reads the branch from git and sees no token.
+      # notes generator does not load, and only a release would have found out.
+      # So this dry-runs one in a throwaway repository, with the analyzer and
+      # notes settings the callers' .releaserc.json use, and checks the version
+      # and the breaking-change notes. env -i keeps the runner's variables out,
+      # so semantic-release reads the branch from git and sees no token.
       - name: Dry-run a release
         shell: bash
         run: |
