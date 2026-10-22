@@ -4,7 +4,7 @@ SPDX-FileCopyrightText: 2025-2026 Jakub Trávník <jakub.travnik@gmail.com>
 SPDX-License-Identifier: AGPL-3.0-or-later
 -->
 
-# hegemony-workflows
+# hegemony-github-workflows
 
 Reusable GitHub Actions workflows shared by the Hegemony repositories.
 
@@ -35,7 +35,7 @@ jobs:
   release:
     name: Release
     if: "!contains(github.event.head_commit.message, '[skip ci]')"
-    uses: hegemony-sh/hegemony-workflows/.github/workflows/plugin-release.yml@<commit-sha> # main
+    uses: hegemony-sh/hegemony-github-workflows/.github/workflows/plugin-release.yml@<commit-sha> # main
     permissions:
       contents: write
       id-token: write
