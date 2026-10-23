@@ -129,7 +129,7 @@ When a release happened and the calling repository is public, a second job
 downloads the assets from the run and attests `dist/*.whl` and
 `dist/SHA256SUMS` with `actions/attest`. Private repositories cannot attest, so
 the job is skipped there and runs by itself once the caller is public. Verify
-with `gh attestation verify --repo hegemony-sh/<repo> <wheel>`.
+with `gh attestation verify --repo hegemony-sh/<repo> --signer-workflow hegemony-sh/hegemony-github-workflows/.github/workflows/plugin-release.yml <wheel>`
 
 ### Recovering a tag without a Release
 
