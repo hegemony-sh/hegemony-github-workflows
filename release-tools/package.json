@@ -4,6 +4,9 @@
   "private": true,
   "description": "The semantic-release toolchain plugin-release.yml installs with `npm ci --ignore-scripts` before it runs a plugin repository's .releaserc.json. The lockfile pins the whole dependency graph; bump it here, under review, never in the callers.",
   "license": "AGPL-3.0-or-later",
+  "scripts": {
+    "test": "node --test"
+  },
   "dependencies": {
     "@semantic-release/changelog": "^7.0.0",
     "@semantic-release/commit-analyzer": "^13.0.1",

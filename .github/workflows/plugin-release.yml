@@ -161,8 +161,13 @@ jobs:
       # Release with dist/*.whl and dist/SHA256SUMS attached. Its exec
       # successCmd records NEW_RELEASE and NEW_RELEASE_VERSION in GITHUB_ENV
       # for the steps below; when nothing is releasable both stay unset.
+      # --extends layers release-tools/release-notes.mjs under it, which keeps
+      # commit trailers (Signed-off-by, Co-authored-by, Claude-Session) out of
+      # the breaking-change notes; the caller's own options still win.
       - name: Run semantic-release
-        run: .hegemony-release-tools/release-tools/node_modules/.bin/semantic-release
+        run: |
+          tools="$GITHUB_WORKSPACE/.hegemony-release-tools/release-tools"
+          "$tools/node_modules/.bin/semantic-release" --extends "$tools/release-notes.mjs"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
