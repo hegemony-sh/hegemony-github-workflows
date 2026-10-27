@@ -115,6 +115,16 @@ the token: it is written after every install, and package lifecycle scripts
 never run. A `.releaserc.json` may only name plugins and presets from that
 lockfile.
 
+semantic-release runs with `--extends release-tools/release-notes.mjs`, a
+shareable config layered under the caller's `.releaserc.json` (the caller's
+options win). It sets only `writerOpts.finalizeContext`, which removes commit
+trailer lines (`Signed-off-by:`, `Co-authored-by:`, `Claude-Session:`, in any
+case) from the breaking-change notes: the conventional-commits parser reads
+everything after a `BREAKING CHANGE:` footer as note text, so without it the
+trailers reach `CHANGELOG.md`, the release commit and the GitHub Release. A
+caller that sets its own top-level `writerOpts` replaces it, and a caller's
+`extends` is overridden by the command-line one.
+
 The plugin repositories' `.releaserc.json` chain, in `prepareCmd`:
 `set_version.py` → `uv lock` → `verify_release_version.py` → `build_wheels.py`
 → `smoke_install_wheels.py` → `sha256sum *.whl > SHA256SUMS` inside `dist/`;

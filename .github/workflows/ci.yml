@@ -151,13 +151,21 @@ jobs:
         working-directory: release-tools
         run: npm ci --ignore-scripts --engine-strict --no-audit --no-fund
 
+      # release-notes.mjs against the installed preset: trailers after a
+      # BREAKING CHANGE footer must not reach the notes.
+      - name: Test the release-notes config
+        working-directory: release-tools
+        run: npm test
+
       # Packages that install can still fail together: preset 10 of
       # conventional-changelog-conventionalcommits needs a changelog writer the
       # notes generator does not load, and only a release would have found out.
       # So this dry-runs one in a throwaway repository, with the analyzer and
-      # notes settings the callers' .releaserc.json use, and checks the version
-      # and the breaking-change notes. env -i keeps the runner's variables out,
-      # so semantic-release reads the branch from git and sees no token.
+      # notes settings the callers' .releaserc.json use and the --extends
+      # plugin-release.yml passes, and checks the version and the
+      # breaking-change notes, which must carry no commit trailer. env -i keeps
+      # the runner's variables out, so semantic-release reads the branch from
+      # git and sees no token.
       - name: Dry-run a release
         shell: bash
         run: |
@@ -171,6 +179,11 @@ jobs:
           git commit -q --allow-empty -m "feat: first"
           git tag v0.1.0
           git commit -q --allow-empty -m "fix!: drop an old flag"
+          git commit -q --allow-empty -m "feat: replace the api" \
+            -m "BREAKING CHANGE: the old api is gone" \
+            -m "Signed-off-by: ci <ci@example.invalid>
+          Co-authored-by: bot <bot@example.invalid>
+          Claude-Session: https://claude.ai/code/session_example"
           git push -q "$repo.git" main v0.1.0
           cat > .releaserc.json <<'JSON'
           {
@@ -182,6 +195,13 @@ jobs:
           }
           JSON
           env -i PATH="$PATH" HOME="$HOME" "$tools/node_modules/.bin/semantic-release" \
-            --dry-run --no-ci --repository-url "file://$repo.git" | tee "$RUNNER_TEMP/dry-run.log"
+            --dry-run --no-ci --repository-url "file://$repo.git" \
+            --extends "$tools/release-notes.mjs" | tee "$RUNNER_TEMP/dry-run.log"
           grep -q 'The next release version is 0.2.0' "$RUNNER_TEMP/dry-run.log"
-          grep -q 'BREAKING CHANGES' "$RUNNER_TEMP/dry-run.log"
+          sed -n '/Release note for version/,$p' "$RUNNER_TEMP/dry-run.log" > "$RUNNER_TEMP/notes.md"
+          grep -q 'BREAKING CHANGES' "$RUNNER_TEMP/notes.md"
+          grep -q 'the old api is gone' "$RUNNER_TEMP/notes.md"
+          if grep -iE '(co-authored-by|signed-off-by|claude-session):' "$RUNNER_TEMP/notes.md"; then
+            echo "::error::commit trailers leaked into the release notes"
+            exit 1
+          fi
