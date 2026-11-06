@@ -165,7 +165,8 @@ by adding `--bundle <repo>-<version>.intoto.jsonl --custom-trusted-root trusted_
 
 If the publish job fails, the Release stays a draft: re-run the failed jobs,
 or publish it by hand with `gh release edit vX.Y.Z --draft=false` once the
-bundle is attached.
+bundle is attached. A re-run that finds the Release already published does
+nothing.
 
 ### Recovering a tag without a Release
 

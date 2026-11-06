@@ -255,7 +255,23 @@ jobs:
     # would not start the caller's `release: published` workflows.
     permissions: {}
     steps:
-      - if: needs.attest.result == 'success'
+      # A re-run after the Release was already published (the job failed
+      # after its last step, say) has nothing left to do, and an immutable
+      # Release would refuse the upload: the remaining steps skip.
+      - name: Check whether the Release is still a draft
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          draft="$(gh release view "v${VERSION}" --repo "$REPOSITORY" --json isDraft --jq .isDraft)"
+          echo "draft=${draft}" >> "$GITHUB_OUTPUT"
+          if [ "$draft" != "true" ]; then
+            echo "::notice::v${VERSION} is already published; nothing to do"
+          fi
+
+      - if: steps.state.outputs.draft == 'true' && needs.attest.result == 'success'
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: provenance-bundle
@@ -265,7 +281,7 @@ jobs:
       # and SHA256SUMS. --clobber makes a re-run safe while the Release is
       # still a draft. The README says how to verify a wheel against it.
       - name: Attach the provenance bundle
-        if: needs.attest.result == 'success'
+        if: steps.state.outputs.draft == 'true' && needs.attest.result == 'success'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
@@ -281,6 +297,7 @@ jobs:
           gh release upload "v${VERSION}" "$name" --repo "$REPOSITORY" --clobber
 
       - name: Publish the Release
+        if: steps.state.outputs.draft == 'true'
         env:
           GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
