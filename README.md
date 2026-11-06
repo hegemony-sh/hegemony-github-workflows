@@ -82,11 +82,23 @@ secret arrives empty.
 ### Permissions
 
 The workflow declares `permissions: {}` and each job asks for what it needs:
-`contents: write` for the release job; `id-token: write`,
-`attestations: write` and `artifact-metadata: write` (the storage record
-`actions/attest` v4 creates) for the attest job only. A called workflow can
+`contents: write` for the release job and for the job that attaches the
+provenance bundle; `id-token: write`, `attestations: write` and
+`artifact-metadata: write` (the storage record `actions/attest` v4 creates)
+for the attest job only. A called workflow can
 only narrow what its caller grants, so the caller's `uses:` job must grant the
 union shown above.
+
+### Provenance
+
+On a public caller, the attest job signs SLSA build provenance for every
+wheel and `SHA256SUMS` with `actions/attest`, which stores it in GitHub's
+attestation store. The same Sigstore bundle is then attached to the GitHub
+Release as `<repository>-<version>.intoto.jsonl`, because tools that check a
+release, OpenSSF Scorecard's Signed-Releases among them, look only at its
+assets. Verify a wheel against it offline with
+`gh attestation verify <wheel> --bundle <repository>-<version>.intoto.jsonl --repo <owner>/<repository>`,
+or online with `gh attestation verify <wheel> --repo <owner>/<repository>`.
 
 ### What the caller must contain
 

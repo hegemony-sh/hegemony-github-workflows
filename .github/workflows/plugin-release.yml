@@ -217,8 +217,52 @@ jobs:
           path: dist
 
       - name: Attest release asset provenance
+        id: attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/*.whl
             dist/SHA256SUMS
+
+      # The attestation also lives in GitHub's attestation store, but tools
+      # that check a release (OpenSSF Scorecard's Signed-Releases among them)
+      # look only at its assets, so the Sigstore bundle crosses to the next
+      # job, which attaches it.
+      - name: Upload the provenance bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: provenance-bundle
+          path: ${{ steps.attest.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  provenance-asset:
+    name: Attach Provenance to the Release
+    needs: [release, attest]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # upload a Release asset
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: provenance-bundle
+          path: provenance
+
+      # One Sigstore bundle holding the signed SLSA provenance of every wheel
+      # and SHA256SUMS. Check it offline with
+      #   gh attestation verify <wheel> --bundle <name>.intoto.jsonl --repo <owner>/<repo>
+      - name: Attach the bundle to the Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          bundles=(provenance/*)
+          if [ "${#bundles[@]}" -ne 1 ] || [ ! -s "${bundles[0]}" ]; then
+            echo "::error::expected one provenance bundle, found: ${bundles[*]}"
+            exit 1
+          fi
+          name="${REPOSITORY#*/}-${VERSION}.intoto.jsonl"
+          cp "${bundles[0]}" "$name"
+          gh release upload "v${VERSION}" "$name" --repo "$REPOSITORY"
