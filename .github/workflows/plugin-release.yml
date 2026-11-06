@@ -217,8 +217,89 @@ jobs:
           path: dist
 
       - name: Attest release asset provenance
+        id: attest
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: |
             dist/*.whl
             dist/SHA256SUMS
+
+      # The attestation also lives in GitHub's attestation store, but tools
+      # that check a release (OpenSSF Scorecard's Signed-Releases among them)
+      # look only at its assets, so the Sigstore bundle crosses to the publish
+      # job, which attaches it.
+      - name: Upload the provenance bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: provenance-bundle
+          path: ${{ steps.attest.outputs.bundle-path }}
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish the Release
+    needs: [release, attest]
+    # semantic-release left the Release a draft (draftRelease in
+    # release-tools/release-notes.mjs): an immutable release takes no new
+    # assets once published, so the bundle goes on first. Runs whether the
+    # attest job ran or was skipped (a private caller, which has no bundle),
+    # but not after it failed: the draft then waits, and nothing unsigned is
+    # published by accident.
+    if: >-
+      !cancelled()
+      && needs.release.outputs.released == 'true'
+      && needs.attest.result != 'failure'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # RELEASE_TOKEN does the work: a Release published with GITHUB_TOKEN
+    # would not start the caller's `release: published` workflows.
+    permissions: {}
+    steps:
+      # A re-run after the Release was already published (the job failed
+      # after its last step, say) has nothing left to do, and an immutable
+      # Release would refuse the upload: the remaining steps skip.
+      - name: Check whether the Release is still a draft
+        id: state
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          draft="$(gh release view "v${VERSION}" --repo "$REPOSITORY" --json isDraft --jq .isDraft)"
+          echo "draft=${draft}" >> "$GITHUB_OUTPUT"
+          if [ "$draft" != "true" ]; then
+            echo "::notice::v${VERSION} is already published; nothing to do"
+          fi
+
+      - if: steps.state.outputs.draft == 'true' && needs.attest.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: provenance-bundle
+          path: provenance
+
+      # One Sigstore bundle holding the signed SLSA provenance of every wheel
+      # and SHA256SUMS. --clobber makes a re-run safe while the Release is
+      # still a draft. The README says how to verify a wheel against it.
+      - name: Attach the provenance bundle
+        if: steps.state.outputs.draft == 'true' && needs.attest.result == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          bundles=(provenance/*)
+          if [ "${#bundles[@]}" -ne 1 ] || [ ! -s "${bundles[0]}" ]; then
+            echo "::error::expected one provenance bundle, found: ${bundles[*]}"
+            exit 1
+          fi
+          name="${REPOSITORY#*/}-${VERSION}.intoto.jsonl"
+          cp "${bundles[0]}" "$name"
+          gh release upload "v${VERSION}" "$name" --repo "$REPOSITORY" --clobber
+
+      - name: Publish the Release
+        if: steps.state.outputs.draft == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release edit "v${VERSION}" --repo "$REPOSITORY" --draft=false
