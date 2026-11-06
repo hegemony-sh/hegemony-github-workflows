@@ -150,7 +150,9 @@ only then publishes the Release, with `RELEASE_TOKEN` so that the caller's
 `release: published` workflows run. The order matters: the plugin
 repositories use immutable releases, and an immutable release takes no new
 assets once it is published. On a private caller the publish job publishes
-the draft without a bundle.
+the draft without a bundle. On a public caller it publishes only after the
+release job and the attest job both succeeded; if either failed or the attest
+job was skipped, the publish job does not run and the Release stays a draft.
 
 Verify a wheel online with
 
@@ -163,7 +165,7 @@ or offline, against the attached bundle and a trusted root fetched earlier on
 a connected machine with `gh attestation trusted-root > trusted_root.jsonl`,
 by adding `--bundle <repo>-<version>.intoto.jsonl --custom-trusted-root trusted_root.jsonl`.
 
-If the publish job fails, the Release stays a draft: re-run the failed jobs,
+If the publish job fails or does not run, the Release stays a draft: re-run the failed jobs,
 or publish it by hand with `gh release edit vX.Y.Z --draft=false` once the
 bundle is attached. A re-run that finds the Release already published does
 nothing.
