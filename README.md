@@ -150,7 +150,9 @@ only then publishes the Release, with `RELEASE_TOKEN` so that the caller's
 `release: published` workflows run. The order matters: the plugin
 repositories use immutable releases, and an immutable release takes no new
 assets once it is published. On a private caller the publish job publishes
-the draft without a bundle.
+the draft without a bundle. On a public caller it publishes only after the
+release job and the attest job both succeeded; if either failed or the attest
+job was skipped, the publish job does not run and the Release stays a draft.
 
 Verify a wheel online with
 
@@ -163,10 +165,20 @@ or offline, against the attached bundle and a trusted root fetched earlier on
 a connected machine with `gh attestation trusted-root > trusted_root.jsonl`,
 by adding `--bundle <repo>-<version>.intoto.jsonl --custom-trusted-root trusted_root.jsonl`.
 
-If the publish job fails, the Release stays a draft: re-run the failed jobs,
-or publish it by hand with `gh release edit vX.Y.Z --draft=false` once the
-bundle is attached. A re-run that finds the Release already published does
-nothing.
+When a run created a draft Release but did not publish it, there are two
+cases. If the release job succeeded and the attest or publish job failed,
+re-run the failed jobs: the publish job attaches the bundle and publishes,
+and a re-run that finds the Release already published does nothing. If the
+release job itself failed after creating the draft (the upload of the assets
+for the attest job, say), re-running it does not help, because
+semantic-release now sees the tag and finds nothing to release. The draft
+then has its wheels but no bundle, and a bundle can only be made by
+`actions/attest` inside a workflow run (it signs with the run's OIDC
+identity), so this workflow has no way to finish it today. Leave the draft
+unpublished and decide by hand: delete the draft and release the next
+version, or, knowingly, publish it without provenance with
+`gh release edit vX.Y.Z --draft=false`. A run with nothing to release creates
+no draft, and nothing needs recovering.
 
 ### Recovering a tag without a Release
 

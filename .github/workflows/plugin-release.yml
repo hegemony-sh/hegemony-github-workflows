@@ -241,14 +241,21 @@ jobs:
     needs: [release, attest]
     # semantic-release left the Release a draft (draftRelease in
     # release-tools/release-notes.mjs): an immutable release takes no new
-    # assets once published, so the bundle goes on first. Runs whether the
-    # attest job ran or was skipped (a private caller, which has no bundle),
-    # but not after it failed: the draft then waits, and nothing unsigned is
+    # assets once published, so the bundle goes on first. Runs only after the
+    # release job succeeded (it uploads the assets the attest job signs, after
+    # recording that a release happened), and then only once the attest job
+    # succeeded, or was skipped because the caller is private and has no
+    # bundle. Anything else, a failed or skipped attest job on a public
+    # caller included, leaves the draft waiting, so nothing unsigned is
     # published by accident.
     if: >-
       !cancelled()
+      && needs.release.result == 'success'
       && needs.release.outputs.released == 'true'
-      && needs.attest.result != 'failure'
+      && (needs.attest.result == 'success'
+          || (needs.attest.result == 'skipped'
+              && github.repository_visibility != 'public'
+              && github.event.repository.visibility != 'public'))
     runs-on: ubuntu-latest
     timeout-minutes: 10
     # RELEASE_TOKEN does the work: a Release published with GITHUB_TOKEN
