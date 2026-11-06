@@ -15,9 +15,10 @@
 // Release. finalizeContext below drops those lines from every note just before
 // the notes are rendered.
 //
-// Only writerOpts is set. A top-level option reaches every plugin, and the
-// commit analyzer reads parserOpts: teaching the parser about trailers there
-// (as note keywords, say) would make each signed-off commit count as breaking.
+// Only writerOpts and draftRelease are set. A top-level option reaches every
+// plugin, and the commit analyzer reads parserOpts: teaching the parser about
+// trailers there (as note keywords, say) would make each signed-off commit
+// count as breaking.
 // The conventionalcommits preset defines no finalizeContext of its own, so
 // this one replaces nothing.
 
@@ -44,6 +45,12 @@ function finalizeContext(context) {
   return context;
 }
 
+// draftRelease is a top-level option for the same reason: it reaches
+// @semantic-release/github, the only plugin that reads it, unless a caller
+// sets its own. The Release is created as a draft with its assets, and
+// plugin-release.yml publishes it once the provenance bundle is attached:
+// an immutable release takes no new assets after publication.
 export default {
   writerOpts: { finalizeContext },
+  draftRelease: true,
 };

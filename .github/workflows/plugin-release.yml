@@ -226,7 +226,7 @@ jobs:
 
       # The attestation also lives in GitHub's attestation store, but tools
       # that check a release (OpenSSF Scorecard's Signed-Releases among them)
-      # look only at its assets, so the Sigstore bundle crosses to the next
+      # look only at its assets, so the Sigstore bundle crosses to the publish
       # job, which attaches it.
       - name: Upload the provenance bundle
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -236,25 +236,38 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  provenance-asset:
-    name: Attach Provenance to the Release
+  publish:
+    name: Publish the Release
     needs: [release, attest]
+    # semantic-release left the Release a draft (draftRelease in
+    # release-tools/release-notes.mjs): an immutable release takes no new
+    # assets once published, so the bundle goes on first. Runs whether the
+    # attest job ran or was skipped (a private caller, which has no bundle),
+    # but not after it failed: the draft then waits, and nothing unsigned is
+    # published by accident.
+    if: >-
+      !cancelled()
+      && needs.release.outputs.released == 'true'
+      && needs.attest.result != 'failure'
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    permissions:
-      contents: write # upload a Release asset
+    # RELEASE_TOKEN does the work: a Release published with GITHUB_TOKEN
+    # would not start the caller's `release: published` workflows.
+    permissions: {}
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      - if: needs.attest.result == 'success'
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: provenance-bundle
           path: provenance
 
       # One Sigstore bundle holding the signed SLSA provenance of every wheel
-      # and SHA256SUMS. Check it offline with
-      #   gh attestation verify <wheel> --bundle <name>.intoto.jsonl --repo <owner>/<repo>
-      - name: Attach the bundle to the Release
+      # and SHA256SUMS. --clobber makes a re-run safe while the Release is
+      # still a draft. The README says how to verify a wheel against it.
+      - name: Attach the provenance bundle
+        if: needs.attest.result == 'success'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
@@ -265,4 +278,11 @@ jobs:
           fi
           name="${REPOSITORY#*/}-${VERSION}.intoto.jsonl"
           cp "${bundles[0]}" "$name"
-          gh release upload "v${VERSION}" "$name" --repo "$REPOSITORY"
+          gh release upload "v${VERSION}" "$name" --repo "$REPOSITORY" --clobber
+
+      - name: Publish the Release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: gh release edit "v${VERSION}" --repo "$REPOSITORY" --draft=false

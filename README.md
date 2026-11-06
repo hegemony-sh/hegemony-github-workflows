@@ -82,23 +82,12 @@ secret arrives empty.
 ### Permissions
 
 The workflow declares `permissions: {}` and each job asks for what it needs:
-`contents: write` for the release job and for the job that attaches the
-provenance bundle; `id-token: write`, `attestations: write` and
-`artifact-metadata: write` (the storage record `actions/attest` v4 creates)
-for the attest job only. A called workflow can
+`contents: write` for the release job; `id-token: write`,
+`attestations: write` and `artifact-metadata: write` (the storage record
+`actions/attest` v4 creates) for the attest job only. The publish job asks for
+nothing: it works with `RELEASE_TOKEN`. A called workflow can
 only narrow what its caller grants, so the caller's `uses:` job must grant the
 union shown above.
-
-### Provenance
-
-On a public caller, the attest job signs SLSA build provenance for every
-wheel and `SHA256SUMS` with `actions/attest`, which stores it in GitHub's
-attestation store. The same Sigstore bundle is then attached to the GitHub
-Release as `<repository>-<version>.intoto.jsonl`, because tools that check a
-release, OpenSSF Scorecard's Signed-Releases among them, look only at its
-assets. Verify a wheel against it offline with
-`gh attestation verify <wheel> --bundle <repository>-<version>.intoto.jsonl --repo <owner>/<repository>`,
-or online with `gh attestation verify <wheel> --repo <owner>/<repository>`.
 
 ### What the caller must contain
 
@@ -150,8 +139,33 @@ the next tag already exists, so a release is never overwritten. Their
 When a release happened and the calling repository is public, a second job
 downloads the assets from the run and attests `dist/*.whl` and
 `dist/SHA256SUMS` with `actions/attest`. Private repositories cannot attest, so
-the job is skipped there and runs by itself once the caller is public. Verify
-with `gh attestation verify --repo hegemony-sh/<repo> --signer-workflow hegemony-sh/hegemony-github-workflows/.github/workflows/plugin-release.yml <wheel>`
+the job is skipped there and runs by itself once the caller is public.
+
+The attestation lives in GitHub's attestation store, but tools that check a
+release, OpenSSF Scorecard's Signed-Releases among them, look only at its
+assets. So semantic-release creates the GitHub Release as a draft
+(`draftRelease: true` in `release-tools/release-notes.mjs`), and the publish
+job attaches the same Sigstore bundle as `<repo>-<version>.intoto.jsonl` and
+only then publishes the Release, with `RELEASE_TOKEN` so that the caller's
+`release: published` workflows run. The order matters: the plugin
+repositories use immutable releases, and an immutable release takes no new
+assets once it is published. On a private caller the publish job publishes
+the draft without a bundle.
+
+Verify a wheel online with
+
+```bash
+gh attestation verify <wheel> --repo hegemony-sh/<repo> \
+  --signer-workflow hegemony-sh/hegemony-github-workflows/.github/workflows/plugin-release.yml
+```
+
+or offline, against the attached bundle and a trusted root fetched earlier on
+a connected machine with `gh attestation trusted-root > trusted_root.jsonl`,
+by adding `--bundle <repo>-<version>.intoto.jsonl --custom-trusted-root trusted_root.jsonl`.
+
+If the publish job fails, the Release stays a draft: re-run the failed jobs,
+or publish it by hand with `gh release edit vX.Y.Z --draft=false` once the
+bundle is attached.
 
 ### Recovering a tag without a Release
 
