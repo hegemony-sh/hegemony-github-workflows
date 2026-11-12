@@ -3,10 +3,12 @@ SPDX-PackageName = "hegemony-github-workflows"
 SPDX-PackageSupplier = "Rexonix s.r.o."
 SPDX-PackageDownloadLocation = "https://github.com/hegemony-sh/hegemony-github-workflows"
 
-# Files that stay without a header: package.json (JSON has no comment syntax),
-# package-lock.json (npm generates and rewrites it) and release-tools/.gitignore.
+# Files that stay without a header: package.json and .github/renovate.json (JSON
+# has no comment syntax), package-lock.json (npm generates and rewrites it) and
+# release-tools/.gitignore.
 [[annotations]]
 path = [
+    ".github/renovate.json",
     "release-tools/package.json",
     "release-tools/package-lock.json",
     "release-tools/.gitignore",
