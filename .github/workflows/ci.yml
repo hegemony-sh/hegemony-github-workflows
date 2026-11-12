@@ -115,7 +115,7 @@ jobs:
         run: uvx reuse@6.2.0 lint
 
   # plugin-release.yml installs release-tools/package-lock.json with exactly
-  # this command in every caller's release. Dependabot's lockfile bumps land
+  # this command in every caller's release. Renovate's lockfile bumps land
   # here first, so a lockfile that no longer installs fails the pull request
   # and not a plugin release. It runs on the Node version plugin-release.yml
   # defaults to, read from that file, so a bump that raises a package's Node

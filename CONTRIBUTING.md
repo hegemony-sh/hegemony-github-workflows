@@ -68,8 +68,8 @@ code that runs with that token. Keep the [README](README.md), which states the
 inputs, secrets and permissions, in step with the workflow, and pin every
 action by its full commit SHA with a version comment.
 
-Dependabot proposes the `release-tools/` lockfile and action bumps weekly;
-they are reviewed like any other change.
+Renovate (`.github/renovate.json`) proposes the `release-tools/` lockfile and
+action bumps weekly; they are reviewed like any other change.
 
 ## Local setup and checks
 

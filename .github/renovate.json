@@ -1,0 +1,36 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Renovate maintains the release-tools/ npm lockfile and the GitHub Actions pins, replacing the Dependabot version updates this repository used, as in the other hegemony-sh repositories. Every `uses:` is pinned to a commit SHA, and without something bumping them they rot silently. The release-tools group and the conventional-changelog exception carry over from the former .github/dependabot.yml. Third-party releases wait a week before they are proposed (minimumReleaseAge); security fixes do not. Its commits are chore(deps), which commitlint accepts as they are.",
+  "extends": ["config:recommended", ":semanticCommits", ":semanticCommitTypeAll(chore)"],
+  "timezone": "Etc/UTC",
+  "schedule": ["before 05:00 on monday"],
+  "semanticCommitScope": "deps",
+  "labels": ["dependencies"],
+  "prConcurrentLimit": 3,
+  "prHourlyLimit": 2,
+  "minimumReleaseAge": "7 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
+  "enabledManagers": ["npm", "github-actions"],
+  "github-actions": {
+    "pinDigests": true
+  },
+  "packageRules": [
+    {
+      "description": "release-tools/ is one semantic-release toolchain; its updates move together, as the former Dependabot group did.",
+      "matchManagers": ["npm"],
+      "groupName": "release-tools"
+    },
+    {
+      "description": "Preset 10 needs conventional-changelog-writer 9, and the latest @semantic-release/release-notes-generator (14.1.1) still loads writer 8, so release notes fail to render. Drop this once a stable notes generator moves to writer 9; CI's release dry run proves the pair.",
+      "matchPackageNames": ["conventional-changelog-conventionalcommits"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    }
+  ],
+  "vulnerabilityAlerts": {
+    "description": "A known vulnerability is not weekly business: these bypass the schedule and are labelled so they stand out.",
+    "labels": ["dependencies", "security"],
+    "schedule": ["at any time"]
+  },
+  "osvVulnerabilityAlerts": true
+}
