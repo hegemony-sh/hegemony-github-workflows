@@ -69,6 +69,7 @@ dependency lockfile together.
 | `python-version` | `"3.12"` | Handed to `actions/setup-python`. |
 | `uv-version` | `"0.9.28"` | Handed to `astral-sh/setup-uv`. Keep it equal to the caller's `ci.yml` pin so the release refreshes `uv.lock` with the resolver CI validated. |
 | `node-version` | `"24"` | Runs semantic-release. The `release-tools` lockfile needs 22.22.2 or later on the 22 line, or 24.15 or later. |
+| `pypi` | `false` | Also upload the wheels to PyPI once the GitHub Release is published. See [PyPI](#pypi) for what the caller and PyPI must have first. |
 
 ### Secrets
 
@@ -84,7 +85,8 @@ secret arrives empty.
 The workflow declares `permissions: {}` and each job asks for what it needs:
 `contents: write` for the release job; `id-token: write`,
 `attestations: write` and `artifact-metadata: write` (the storage record
-`actions/attest` v4 creates) for the attest job only. The publish job asks for
+`actions/attest` v4 creates) for the attest job; `id-token: write` for the
+pypi job. The publish job asks for
 nothing: it works with `RELEASE_TOKEN`. A called workflow can
 only narrow what its caller grants, so the caller's `uses:` job must grant the
 union shown above.
@@ -179,6 +181,32 @@ unpublished and decide by hand: delete the draft and release the next
 version, or, knowingly, publish it without provenance with
 `gh release edit vX.Y.Z --draft=false`. A run with nothing to release creates
 no draft, and nothing needs recovering.
+
+### PyPI
+
+With `pypi: true`, a last job uploads the release's wheels (not
+`SHA256SUMS`) to PyPI with `pypa/gh-action-pypi-publish`. It runs only after
+the publish job succeeded, so a run that leaves the Release a draft uploads
+nothing; an upload to PyPI cannot be undone, only yanked. It uses trusted
+publishing: no API token is stored anywhere. PyPI checks the run's OIDC token
+against a trusted publisher configured for each package, which must name
+
+| Field | Value |
+|---|---|
+| Owner | `hegemony-sh` |
+| Repository | the caller, e.g. `hegemony-step-plugins` |
+| Workflow | `release.yml` (the caller's file; PyPI matches the top-level workflow, not this reusable one) |
+| Environment | `pypi` |
+
+Before the first release with `pypi: true`, add a pending trusted publisher
+on PyPI for every package the caller builds (a pending publisher also reserves
+the name), and create the `pypi` environment in the caller with a deployment
+rule that admits only `main`. A package without a matching publisher fails the
+job; the GitHub Release is already out by then, so fix the publisher and
+re-run the failed job: `skip-existing` skips the files PyPI already holds.
+The run's artifacts are kept for one day, so re-run within that day. PyPI
+also stores its own PEP 740 attestation for each file, made from the same OIDC
+identity.
 
 ### Recovering a tag without a Release
 

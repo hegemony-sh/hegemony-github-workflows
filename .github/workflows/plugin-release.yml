@@ -37,6 +37,16 @@ on:
         type: string
         required: false
         default: "24"
+      pypi:
+        description: >-
+          Also upload the release's wheels to PyPI, after the GitHub Release
+          is published. Needs a PyPI trusted publisher for every package,
+          naming the caller's repository, its release.yml workflow and the
+          environment `pypi`. Off by default, so a caller without them is not
+          broken.
+        type: boolean
+        required: false
+        default: false
     secrets:
       RELEASE_TOKEN:
         description: >-
@@ -48,7 +58,8 @@ on:
 
 # Nothing by default; each job states what it needs. The caller must grant at
 # least the union (contents: write, id-token: write, attestations: write,
-# artifact-metadata: write) on its `uses:` job, because a called workflow can
+# artifact-metadata: write) on its `uses:` job (the pypi job needs only
+# id-token: write, which the union already holds), because a called workflow can
 # only narrow what it is given.
 permissions: {}
 
@@ -310,3 +321,48 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.release.outputs.version }}
         run: gh release edit "v${VERSION}" --repo "$REPOSITORY" --draft=false
+
+  pypi:
+    name: Publish to PyPI
+    needs: [release, publish]
+    # Runs only when the caller opted in, a release happened and the GitHub
+    # Release was published (or found already published on a re-run). PyPI
+    # comes last because an upload there cannot be undone: a run that stopped
+    # with a draft Release uploads nothing.
+    if: >-
+      inputs.pypi
+      && !cancelled()
+      && needs.release.outputs.released == 'true'
+      && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # PyPI trusts the run through its OIDC token. The token names the caller's
+    # repository, its top-level workflow (release.yml, not this reusable one)
+    # and this environment, and each package's trusted publisher on PyPI must
+    # match all three. The environment lives in the caller's repository; give
+    # it a deployment rule that admits only main.
+    environment:
+      name: pypi
+    permissions:
+      id-token: write # trusted publishing and the PyPI (PEP 740) attestations
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: dist
+
+      # The artifact also carries SHA256SUMS, which PyPI would refuse as an
+      # unknown file type. Upload exactly the wheels the GitHub Release has.
+      - name: Keep only the wheels
+        run: |
+          rm -f dist/SHA256SUMS
+          ls -1 dist
+          compgen -G 'dist/*.whl' > /dev/null || { echo "::error::no wheels to upload"; exit 1; }
+
+      # skip-existing makes a re-run safe after a partial upload: files PyPI
+      # already holds are skipped, never replaced (PyPI refuses that anyway).
+      - name: Upload to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          skip-existing: true
