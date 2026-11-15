@@ -199,11 +199,12 @@ against a trusted publisher configured for each package, which must name
 | Environment | `pypi` |
 
 Before the first release with `pypi: true`, add a pending trusted publisher
-on PyPI for every package the caller builds (a pending publisher also reserves
-the name), and create the `pypi` environment in the caller with a deployment
+on PyPI for every package the caller builds, and create the `pypi` environment in the caller with a deployment
 rule that admits only `main`. A package without a matching publisher fails the
 job; the GitHub Release is already out by then, so fix the publisher and
 re-run the failed job: `skip-existing` skips the files PyPI already holds.
+A pending publisher does not reserve the name: until the first upload creates
+the project, anyone can register it and the pending publisher is dropped.
 The run's artifacts are kept for one day, so re-run within that day. PyPI
 also stores its own PEP 740 attestation for each file, made from the same OIDC
 identity.
