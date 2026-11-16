@@ -188,8 +188,9 @@ no draft, and nothing needs recovering.
 | `version` | The released version without the leading `v`; empty when nothing was released. |
 | `published` | `"true"` once the GitHub Release is published, also on a re-run that found it already published. |
 
-The wheels and `SHA256SUMS` stay in the run's `release-assets` artifact for
-one day.
+The wheels, the sdists (when the caller builds them) and `SHA256SUMS` stay in
+the run's `release-assets` artifact for one day. The attest job signs all of
+them.
 
 ### PyPI
 
@@ -219,20 +220,21 @@ PyPI itself. A caller that publishes to PyPI adds its own job to its
           name: release-assets
           path: dist
       # Upload exactly the files the GitHub Release carries and the attest
-      # job signed: every wheel must be in SHA256SUMS with a matching hash and
-      # carry the released version. PyPI refuses SHA256SUMS itself as an
-      # unknown file type, so it goes once checked.
-      - name: Check the wheels against the release
+      # job signed: every wheel and sdist must be in SHA256SUMS with a
+      # matching hash and carry the released version. PyPI refuses
+      # SHA256SUMS itself as an unknown file type, so it goes once checked.
+      - name: Check the files against the release
         working-directory: dist
         env:
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           sha256sum --check --strict SHA256SUMS
-          for wheel in *.whl; do
-            grep -q "  ${wheel}\$" SHA256SUMS || { echo "::error::${wheel} is not in SHA256SUMS"; exit 1; }
-            case "$wheel" in
-              *-"${VERSION}"-py3-none-any.whl) ;;
-              *) echo "::error::${wheel} is not a ${VERSION} wheel"; exit 1 ;;
+          shopt -s nullglob
+          for file in *.whl *.tar.gz; do
+            grep -q "  ${file}\$" SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
+            case "$file" in
+              *-"${VERSION}"-py3-none-any.whl | *-"${VERSION}".tar.gz) ;;
+              *) echo "::error::${file} is not a ${VERSION} file"; exit 1 ;;
             esac
           done
           rm SHA256SUMS
@@ -263,6 +265,21 @@ re-run the failed job within the artifact's one day: `skip-existing` skips the
 files PyPI already holds. A pending publisher does not reserve the name:
 until the first upload creates the project, anyone can register it and the
 pending publisher is dropped.
+
+Packages that are new to PyPI need care. An account may hold only 3 pending
+publishers at a time, and PyPI lets an account create only a few new projects
+per day (4 per 24 hours at the time of writing). The job uploads every package
+in one run, so a first release with more new packages than that fails part way.
+For a repository with many new packages, create the projects first: upload
+the current release's wheels by hand with an account-scoped API token, a few
+per day, and delete the token after each run. Then give each existing project a
+normal (not pending) trusted publisher before the first release with the job.
+
+For a manual gate, add a required reviewer to the caller's `pypi` environment
+(Settings → Environments → `pypi` → Required reviewers). The GitHub Release
+still goes out on its own, and the `pypi` job waits until a reviewer approves
+it. Leave "Prevent self-review" off when the person who merges is also the
+only reviewer.
 
 ### Recovering a tag without a Release
 

@@ -49,7 +49,8 @@ on:
           "true" once the GitHub Release is published (also on a re-run that
           found it already published). A caller gates its PyPI job on this:
           trusted publishing does not work inside a reusable workflow, so
-          the upload must run in the caller's own workflow. The wheels are
+          the upload must run in the caller's own workflow. The wheels (and
+          sdists, when the caller builds them) are
           in this run's `release-assets` artifact.
         value: ${{ jobs.publish.outputs.published }}
     secrets:
@@ -173,7 +174,8 @@ jobs:
       # The caller's .releaserc.json drives everything from here: refusing a
       # version whose Release already exists, the version bump, uv.lock
       # refresh, wheel build, CHANGELOG, release commit, tag and the GitHub
-      # Release with dist/*.whl and dist/SHA256SUMS attached. Its exec
+      # Release with dist/*.whl (and dist/*.tar.gz sdists, when the caller
+      # builds them) and dist/SHA256SUMS attached. Its exec
       # successCmd records NEW_RELEASE and NEW_RELEASE_VERSION in GITHUB_ENV
       # for the steps below; when nothing is releasable both stay unset.
       # --extends layers release-tools/release-notes.mjs under it, which keeps
@@ -201,6 +203,7 @@ jobs:
           name: release-assets
           path: |
             dist/*.whl
+            dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 1
@@ -237,6 +240,7 @@ jobs:
         with:
           subject-path: |
             dist/*.whl
+            dist/*.tar.gz
             dist/SHA256SUMS
 
       # The attestation also lives in GitHub's attestation store, but tools
