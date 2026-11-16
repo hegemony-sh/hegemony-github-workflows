@@ -37,6 +37,22 @@ on:
         type: string
         required: false
         default: "24"
+    outputs:
+      released:
+        description: '"true" when this run cut a release, else "false".'
+        value: ${{ jobs.release.outputs.released }}
+      version:
+        description: The released version without the leading v; empty when nothing was released.
+        value: ${{ jobs.release.outputs.version }}
+      published:
+        description: >-
+          "true" once the GitHub Release is published (also on a re-run that
+          found it already published). A caller gates its PyPI job on this:
+          trusted publishing does not work inside a reusable workflow, so
+          the upload must run in the caller's own workflow. The wheels (and
+          sdists, when the caller builds them) are
+          in this run's `release-assets` artifact.
+        value: ${{ jobs.publish.outputs.published }}
     secrets:
       RELEASE_TOKEN:
         description: >-
@@ -158,7 +174,8 @@ jobs:
       # The caller's .releaserc.json drives everything from here: refusing a
       # version whose Release already exists, the version bump, uv.lock
       # refresh, wheel build, CHANGELOG, release commit, tag and the GitHub
-      # Release with dist/*.whl and dist/SHA256SUMS attached. Its exec
+      # Release with dist/*.whl (and dist/*.tar.gz sdists, when the caller
+      # builds them) and dist/SHA256SUMS attached. Its exec
       # successCmd records NEW_RELEASE and NEW_RELEASE_VERSION in GITHUB_ENV
       # for the steps below; when nothing is releasable both stay unset.
       # --extends layers release-tools/release-notes.mjs under it, which keeps
@@ -186,6 +203,7 @@ jobs:
           name: release-assets
           path: |
             dist/*.whl
+            dist/*.tar.gz
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 1
@@ -222,6 +240,7 @@ jobs:
         with:
           subject-path: |
             dist/*.whl
+            dist/*.tar.gz
             dist/SHA256SUMS
 
       # The attestation also lives in GitHub's attestation store, but tools
@@ -261,6 +280,8 @@ jobs:
     # RELEASE_TOKEN does the work: a Release published with GITHUB_TOKEN
     # would not start the caller's `release: published` workflows.
     permissions: {}
+    outputs:
+      published: ${{ steps.done.outputs.published }}
     steps:
       # A re-run after the Release was already published (the job failed
       # after its last step, say) has nothing left to do, and an immutable
@@ -310,3 +331,9 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.release.outputs.version }}
         run: gh release edit "v${VERSION}" --repo "$REPOSITORY" --draft=false
+
+      # Reached only when every step above succeeded or had nothing to do,
+      # so the Release is public now. Callers gate their PyPI upload on it.
+      - name: Record that the Release is published
+        id: done
+        run: echo "published=true" >> "$GITHUB_OUTPUT"

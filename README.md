@@ -180,6 +180,107 @@ version, or, knowingly, publish it without provenance with
 `gh release edit vX.Y.Z --draft=false`. A run with nothing to release creates
 no draft, and nothing needs recovering.
 
+### Outputs
+
+| Output | Meaning |
+|---|---|
+| `released` | `"true"` when the run cut a release, else `"false"`. |
+| `version` | The released version without the leading `v`; empty when nothing was released. |
+| `published` | `"true"` once the GitHub Release is published, also on a re-run that found it already published. |
+
+The wheels, the sdists (when the caller builds them) and `SHA256SUMS` stay in
+the run's `release-assets` artifact for one day. The attest job signs all of
+them.
+
+### PyPI
+
+Trusted publishing does not work from inside a reusable workflow
+(`pypa/gh-action-pypi-publish` documents this as unsupported; the token
+exchange fails with `invalid-publisher`). So this workflow does not upload to
+PyPI itself. A caller that publishes to PyPI adds its own job to its
+`release.yml`, after the `release` job, and uploads the wheels from the
+`release-assets` artifact:
+
+```yaml
+  pypi:
+    name: Publish to PyPI
+    needs: release
+    # Only after the GitHub Release is published: an upload to PyPI cannot
+    # be undone, only yanked.
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+    permissions:
+      id-token: write # trusted publishing and the PyPI (PEP 740) attestations
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: dist
+      # Upload exactly the files the GitHub Release carries and the attest
+      # job signed: every wheel and sdist must be in SHA256SUMS with a
+      # matching hash and carry the released version. PyPI refuses
+      # SHA256SUMS itself as an unknown file type, so it goes once checked.
+      - name: Check the files against the release
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          sha256sum --check --strict SHA256SUMS
+          shopt -s nullglob
+          for file in *.whl *.tar.gz; do
+            grep -q "  ${file}\$" SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
+            case "$file" in
+              *-"${VERSION}"-py3-none-any.whl | *-"${VERSION}".tar.gz) ;;
+              *) echo "::error::${file} is not a ${VERSION} file"; exit 1 ;;
+            esac
+          done
+          rm SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          attestations: true # PEP 740 attestations, shown on PyPI
+          print-hash: true
+          skip-existing: true
+```
+
+The `uses:` job must still grant `id-token: write` for the attest job; the
+`pypi` job asks for its own. PyPI checks the run's OIDC token against a trusted
+publisher configured for each package, which must name
+
+| Field | Value |
+|---|---|
+| Owner | `hegemony-sh` |
+| Repository | the caller, e.g. `hegemony-step-plugins` |
+| Workflow | `release.yml` |
+| Environment | `pypi` |
+
+Before the first release with the job, give every package the caller builds a
+trusted publisher on PyPI, and create the `pypi` environment in the caller
+with a deployment rule that admits only `main`. A package without a matching
+publisher fails the job after the GitHub Release is out; fix the publisher and
+re-run the failed job within the artifact's one day: `skip-existing` skips the
+files PyPI already holds. A pending publisher does not reserve the name:
+until the first upload creates the project, anyone can register it and the
+pending publisher is dropped.
+
+Packages that are new to PyPI need care. An account may hold only 3 pending
+publishers at a time, and PyPI lets an account create only a few new projects
+per day (4 per 24 hours at the time of writing). The job uploads every package
+in one run, so a first release with more new packages than that fails part way.
+For a repository with many new packages, create the projects first: upload
+the current release's wheels by hand with an account-scoped API token, a few
+per day, and delete the token after each run. Then give each existing project a
+normal (not pending) trusted publisher before the first release with the job.
+
+For a manual gate, add a required reviewer to the caller's `pypi` environment
+(Settings → Environments → `pypi` → Required reviewers). The GitHub Release
+still goes out on its own, and the `pypi` job waits until a reviewer approves
+it. Leave "Prevent self-review" off when the person who merges is also the
+only reviewer.
+
 ### Recovering a tag without a Release
 
 semantic-release pushes the release commit and the `vX.Y.Z` tag before it
