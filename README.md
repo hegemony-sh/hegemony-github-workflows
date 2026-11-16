@@ -69,7 +69,6 @@ dependency lockfile together.
 | `python-version` | `"3.12"` | Handed to `actions/setup-python`. |
 | `uv-version` | `"0.9.28"` | Handed to `astral-sh/setup-uv`. Keep it equal to the caller's `ci.yml` pin so the release refreshes `uv.lock` with the resolver CI validated. |
 | `node-version` | `"24"` | Runs semantic-release. The `release-tools` lockfile needs 22.22.2 or later on the 22 line, or 24.15 or later. |
-| `pypi` | `false` | Also upload the wheels to PyPI once the GitHub Release is published. See [PyPI](#pypi) for what the caller and PyPI must have first. |
 
 ### Secrets
 
@@ -85,8 +84,7 @@ secret arrives empty.
 The workflow declares `permissions: {}` and each job asks for what it needs:
 `contents: write` for the release job; `id-token: write`,
 `attestations: write` and `artifact-metadata: write` (the storage record
-`actions/attest` v4 creates) for the attest job; `id-token: write` for the
-pypi job. The publish job asks for
+`actions/attest` v4 creates) for the attest job only. The publish job asks for
 nothing: it works with `RELEASE_TOKEN`. A called workflow can
 only narrow what its caller grants, so the caller's `uses:` job must grant the
 union shown above.
@@ -182,32 +180,89 @@ version, or, knowingly, publish it without provenance with
 `gh release edit vX.Y.Z --draft=false`. A run with nothing to release creates
 no draft, and nothing needs recovering.
 
+### Outputs
+
+| Output | Meaning |
+|---|---|
+| `released` | `"true"` when the run cut a release, else `"false"`. |
+| `version` | The released version without the leading `v`; empty when nothing was released. |
+| `published` | `"true"` once the GitHub Release is published, also on a re-run that found it already published. |
+
+The wheels and `SHA256SUMS` stay in the run's `release-assets` artifact for
+one day.
+
 ### PyPI
 
-With `pypi: true`, a last job uploads the release's wheels (not
-`SHA256SUMS`) to PyPI with `pypa/gh-action-pypi-publish`. It runs only after
-the publish job succeeded, so a run that leaves the Release a draft uploads
-nothing; an upload to PyPI cannot be undone, only yanked. It uses trusted
-publishing: no API token is stored anywhere. PyPI checks the run's OIDC token
-against a trusted publisher configured for each package, which must name
+Trusted publishing does not work from inside a reusable workflow
+(`pypa/gh-action-pypi-publish` documents this as unsupported; the token
+exchange fails with `invalid-publisher`). So this workflow does not upload to
+PyPI itself. A caller that publishes to PyPI adds its own job to its
+`release.yml`, after the `release` job, and uploads the wheels from the
+`release-assets` artifact:
+
+```yaml
+  pypi:
+    name: Publish to PyPI
+    needs: release
+    # Only after the GitHub Release is published: an upload to PyPI cannot
+    # be undone, only yanked.
+    if: needs.release.outputs.published == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment:
+      name: pypi
+    permissions:
+      id-token: write # trusted publishing and the PyPI (PEP 740) attestations
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-assets
+          path: dist
+      # Upload exactly the files the GitHub Release carries and the attest
+      # job signed: every wheel must be in SHA256SUMS with a matching hash and
+      # carry the released version. PyPI refuses SHA256SUMS itself as an
+      # unknown file type, so it goes once checked.
+      - name: Check the wheels against the release
+        working-directory: dist
+        env:
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          sha256sum --check --strict SHA256SUMS
+          for wheel in *.whl; do
+            grep -q "  ${wheel}\$" SHA256SUMS || { echo "::error::${wheel} is not in SHA256SUMS"; exit 1; }
+            case "$wheel" in
+              *-"${VERSION}"-py3-none-any.whl) ;;
+              *) echo "::error::${wheel} is not a ${VERSION} wheel"; exit 1 ;;
+            esac
+          done
+          rm SHA256SUMS
+      - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
+        with:
+          packages-dir: dist/
+          attestations: true # PEP 740 attestations, shown on PyPI
+          print-hash: true
+          skip-existing: true
+```
+
+The `uses:` job must still grant `id-token: write` for the attest job; the
+`pypi` job asks for its own. PyPI checks the run's OIDC token against a trusted
+publisher configured for each package, which must name
 
 | Field | Value |
 |---|---|
 | Owner | `hegemony-sh` |
 | Repository | the caller, e.g. `hegemony-step-plugins` |
-| Workflow | `release.yml` (the caller's file; PyPI matches the top-level workflow, not this reusable one) |
+| Workflow | `release.yml` |
 | Environment | `pypi` |
 
-Before the first release with `pypi: true`, add a pending trusted publisher
-on PyPI for every package the caller builds, and create the `pypi` environment in the caller with a deployment
-rule that admits only `main`. A package without a matching publisher fails the
-job; the GitHub Release is already out by then, so fix the publisher and
-re-run the failed job: `skip-existing` skips the files PyPI already holds.
-A pending publisher does not reserve the name: until the first upload creates
-the project, anyone can register it and the pending publisher is dropped.
-The run's artifacts are kept for one day, so re-run within that day. PyPI
-also stores its own PEP 740 attestation for each file, made from the same OIDC
-identity.
+Before the first release with the job, give every package the caller builds a
+trusted publisher on PyPI, and create the `pypi` environment in the caller
+with a deployment rule that admits only `main`. A package without a matching
+publisher fails the job after the GitHub Release is out; fix the publisher and
+re-run the failed job within the artifact's one day: `skip-existing` skips the
+files PyPI already holds. A pending publisher does not reserve the name:
+until the first upload creates the project, anyone can register it and the
+pending publisher is dropped.
 
 ### Recovering a tag without a Release
 
