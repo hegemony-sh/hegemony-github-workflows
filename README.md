@@ -128,7 +128,8 @@ caller that sets its own top-level `writerOpts` replaces it, and a caller's
 
 The plugin repositories' `.releaserc.json` chain, in `prepareCmd`:
 `set_version.py` → `uv lock` → `verify_release_version.py` → `build_wheels.py`
-→ `smoke_install_wheels.py` → `sha256sum *.whl > SHA256SUMS` inside `dist/`;
+→ `smoke_install_wheels.py` → `sha256sum *.whl *.tar.gz > SHA256SUMS` inside
+`dist/` (`*.tar.gz` once the caller builds sdists);
 and in `verifyReleaseCmd` they refuse to continue when a GitHub Release for
 the next tag already exists, so a release is never overwritten. Their
 `successCmd` writes `NEW_RELEASE=true` and `NEW_RELEASE_VERSION` to
@@ -310,9 +311,10 @@ checkout of the tag:
 ```bash
 git fetch --tags origin && git checkout vX.Y.Z
 uv sync --frozen --all-packages
-uv run --no-sync python scripts/build_wheels.py && (cd dist && sha256sum *.whl > SHA256SUMS)
+uv run --no-sync python scripts/build_wheels.py
+(cd dist && shopt -s nullglob && sha256sum *.whl *.tar.gz > SHA256SUMS)
 gh release create vX.Y.Z --verify-tag --title vX.Y.Z \
-  --notes "$(awk '/^## /{n++} n==1' CHANGELOG.md)" dist/*.whl dist/SHA256SUMS
+  --notes "$(awk '/^## /{n++} n==1' CHANGELOG.md)" dist/*.whl $(ls dist/*.tar.gz 2>/dev/null) dist/SHA256SUMS
 ```
 
 `--verify-tag` refuses to create a tag that is not already on the remote, so
