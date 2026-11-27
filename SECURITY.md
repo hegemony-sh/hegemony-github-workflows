@@ -9,7 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-or-later
 
 Security reports are handled privately. Please do not open a public GitHub issue for vulnerabilities, suspected vulnerabilities, leaked secrets, or exploit details.
 
-This policy covers what this repository publishes: the reusable release workflow `plugin-release.yml` and the `release-tools/` lockfile of the semantic-release toolchain it installs. The workflow runs inside the plugin repositories' releases with their `RELEASE_TOKEN` and write access, so a flaw here, such as a script injection, a token that reaches a log or the disk too early, or a compromised package in the lockfile, can reach every repository that calls it. A vulnerability in the Hegemony platform itself is reported the same way; its own policy is in the [platform's SECURITY.md](https://github.com/hegemony-sh/hegemony/blob/develop/SECURITY.md).
+This policy covers what this repository publishes: the reusable release workflow `plugin-release.yml` and the `release-tools/` lockfile of the semantic-release toolchain it installs. The workflow runs inside the plugin repositories' releases with their `RELEASE_TOKEN` and write access, so a flaw here, such as a script injection, a token that reaches a log or the disk too early, or a compromised package in the lockfile, can reach every repository that calls it. A vulnerability in the Hegemony platform itself is reported the same way; its own policy is in the [platform's SECURITY.md](https://github.com/hegemony-sh/hegemony/blob/main/SECURITY.md).
 
 ## Supported versions
 
