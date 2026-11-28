@@ -128,7 +128,8 @@ caller that sets its own top-level `writerOpts` replaces it, and a caller's
 
 The plugin repositories' `.releaserc.json` chain, in `prepareCmd`:
 `set_version.py` → `uv lock` → `verify_release_version.py` → `build_wheels.py`
-→ `smoke_install_wheels.py` → `sha256sum *.whl > SHA256SUMS` inside `dist/`;
+→ `smoke_install_wheels.py` → `sha256sum *.whl *.tar.gz > SHA256SUMS` inside
+`dist/` (`*.tar.gz` once the caller builds sdists);
 and in `verifyReleaseCmd` they refuse to continue when a GitHub Release for
 the next tag already exists, so a release is never overwritten. Their
 `successCmd` writes `NEW_RELEASE=true` and `NEW_RELEASE_VERSION` to
@@ -198,8 +199,9 @@ Trusted publishing does not work from inside a reusable workflow
 (`pypa/gh-action-pypi-publish` documents this as unsupported; the token
 exchange fails with `invalid-publisher`). So this workflow does not upload to
 PyPI itself. A caller that publishes to PyPI adds its own job to its
-`release.yml`, after the `release` job, and uploads the wheels from the
-`release-assets` artifact:
+`release.yml`, after the `release` job. It downloads the files from the
+published GitHub Release rather than from the run's one-day artifact, so an
+approval by a required reviewer, or a re-run, still works days later:
 
 ```yaml
   pypi:
@@ -213,29 +215,46 @@ PyPI itself. A caller that publishes to PyPI adds its own job to its
     environment:
       name: pypi
     permissions:
+      contents: read # download the published Release's assets
+      attestations: read # verify their provenance attestations
       id-token: write # trusted publishing and the PyPI (PEP 740) attestations
     steps:
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          name: release-assets
-          path: dist
-      # Upload exactly the files the GitHub Release carries and the attest
-      # job signed: every wheel and sdist must be in SHA256SUMS with a
-      # matching hash and carry the released version. PyPI refuses
-      # SHA256SUMS itself as an unknown file type, so it goes once checked.
+      # The files come from the published GitHub Release, not from a run
+      # artifact: a Release is immutable and stays, so the job still works
+      # when the required reviewer approves it days later or it is re-run.
+      - name: Download the published Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          VERSION: ${{ needs.release.outputs.version }}
+        run: |
+          gh release download "v${VERSION}" --repo "$REPOSITORY" --dir dist \
+            --pattern '*.whl' --pattern '*.tar.gz' --pattern SHA256SUMS
+      # Upload exactly the files the release workflow built and attested:
+      # every wheel and sdist must be in SHA256SUMS with a matching hash,
+      # carry the released version and have a provenance attestation from
+      # the shared release workflow. PyPI refuses SHA256SUMS itself as an
+      # unknown file type, so it goes once checked.
       - name: Check the files against the release
         working-directory: dist
         env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
           VERSION: ${{ needs.release.outputs.version }}
         run: |
           sha256sum --check --strict SHA256SUMS
           shopt -s nullglob
-          for file in *.whl *.tar.gz; do
-            grep -q "  ${file}\$" SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
+          files=(*.whl *.tar.gz)
+          [ "${#files[@]}" -gt 0 ] || { echo "::error::no wheels or sdists in the Release"; exit 1; }
+          for file in "${files[@]}"; do
+            awk -v f="$file" '$2 == f {found = 1} END {exit !found}' SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
             case "$file" in
               *-"${VERSION}"-py3-none-any.whl | *-"${VERSION}".tar.gz) ;;
               *) echo "::error::${file} is not a ${VERSION} file"; exit 1 ;;
             esac
+            gh attestation verify "$file" --repo "$REPOSITORY" \
+              --signer-workflow hegemony-sh/hegemony-github-workflows/.github/workflows/plugin-release.yml \
+              > /dev/null
           done
           rm SHA256SUMS
       - uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # v1.14.3
@@ -261,8 +280,7 @@ Before the first release with the job, give every package the caller builds a
 trusted publisher on PyPI, and create the `pypi` environment in the caller
 with a deployment rule that admits only `main`. A package without a matching
 publisher fails the job after the GitHub Release is out; fix the publisher and
-re-run the failed job within the artifact's one day: `skip-existing` skips the
-files PyPI already holds. A pending publisher does not reserve the name:
+re-run the failed job: `skip-existing` skips the files PyPI already holds. A pending publisher does not reserve the name:
 until the first upload creates the project, anyone can register it and the
 pending publisher is dropped.
 
@@ -293,9 +311,10 @@ checkout of the tag:
 ```bash
 git fetch --tags origin && git checkout vX.Y.Z
 uv sync --frozen --all-packages
-uv run --no-sync python scripts/build_wheels.py && (cd dist && sha256sum *.whl > SHA256SUMS)
+uv run --no-sync python scripts/build_wheels.py
+(cd dist && shopt -s nullglob && sha256sum *.whl *.tar.gz > SHA256SUMS)
 gh release create vX.Y.Z --verify-tag --title vX.Y.Z \
-  --notes "$(awk '/^## /{n++} n==1' CHANGELOG.md)" dist/*.whl dist/SHA256SUMS
+  --notes "$(awk '/^## /{n++} n==1' CHANGELOG.md)" dist/*.whl $(ls dist/*.tar.gz 2>/dev/null) dist/SHA256SUMS
 ```
 
 `--verify-tag` refuses to create a tag that is not already on the remote, so
