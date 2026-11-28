@@ -247,7 +247,7 @@ approval by a required reviewer, or a re-run, still works days later:
           files=(*.whl *.tar.gz)
           [ "${#files[@]}" -gt 0 ] || { echo "::error::no wheels or sdists in the Release"; exit 1; }
           for file in "${files[@]}"; do
-            grep -q "  ${file}\$" SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
+            awk -v f="$file" '$2 == f {found = 1} END {exit !found}' SHA256SUMS || { echo "::error::${file} is not in SHA256SUMS"; exit 1; }
             case "$file" in
               *-"${VERSION}"-py3-none-any.whl | *-"${VERSION}".tar.gz) ;;
               *) echo "::error::${file} is not a ${VERSION} file"; exit 1 ;;
